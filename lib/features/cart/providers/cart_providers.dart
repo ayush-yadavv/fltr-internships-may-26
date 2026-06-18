@@ -54,18 +54,20 @@ class CartNotifier extends AsyncNotifier<CartState> {
   }
 
   Future<void> incrementQuantity(String productId) async {
-    final item = state.requireValue.items
-        .firstWhere((i) => i.productId == productId);
+    final current = state.requireValue;
+    final item = current.items.firstWhere((i) => i.productId == productId);
 
-    await _cartRepository.persistCart(state.requireValue);
-
-    state = AsyncData(state.requireValue.copyWith(
-      items: state.requireValue.items
+    final next = current.copyWith(
+      items: current.items
           .map((i) => i.productId == productId
-              ? i.copyWith(quantity: item.quantity + 1)
+              ? i.copyWith(quantity: i.quantity + 1)
               : i)
           .toList(),
-    ));
+      total: current.total + item.price,
+    );
+
+    state = AsyncData(next);
+    await _cartRepository.persistCart(next);
   }
 
   Future<void> decrementQuantity(String productId) async {
@@ -77,13 +79,17 @@ class CartNotifier extends AsyncNotifier<CartState> {
       return;
     }
 
-    state = AsyncData(current.copyWith(
+    final next = current.copyWith(
       items: current.items
           .map((i) => i.productId == productId
               ? i.copyWith(quantity: i.quantity - 1)
               : i)
           .toList(),
-    ));
-    await _cartRepository.persistCart(current);
+      total: current.total - item.price,
+    );
+
+    state = AsyncData(next);
+    await _cartRepository.persistCart(next);
   }
 }
+
