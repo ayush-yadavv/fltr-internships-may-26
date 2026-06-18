@@ -39,7 +39,6 @@ class SavedScreen extends ConsumerWidget {
               ),
             );
           }
-          // TODO: wire remove and move-to-cart actions via SavedNotifier
           return ListView.separated(
             itemCount: items.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
