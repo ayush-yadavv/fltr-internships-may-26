@@ -28,16 +28,31 @@ class CartNotifier extends AsyncNotifier<CartState> {
           .copyWith(quantity: updatedItems[existingIndex].quantity + 1);
       next = current.copyWith(
         items: updatedItems,
-        total: current.total + item.price,
+        total: updatedItems.fold<double>(
+  0.0,
+  (sum, i) => sum + (i.price * i.quantity),
+)
       );
+
+    //   state = AsyncData(next);
+    // await _cartRepository.persistCart(next);
     } else {
       next = current.copyWith(
         items: [...current.items, item],
-        total: current.total + item.price,
+       total: current.total + item.price,
+
+       
+
       );
+    
     }
 
-    state = AsyncData(next);
+    state = AsyncData(
+      
+    next
+      
+      );
+
     await _cartRepository.persistCart(next);
   }
 
@@ -53,20 +68,21 @@ class CartNotifier extends AsyncNotifier<CartState> {
     await _cartRepository.persistCart(next);
   }
 
-  Future<void> incrementQuantity(String productId) async {
-    final item = state.requireValue.items
-        .firstWhere((i) => i.productId == productId);
+ Future<void> incrementQuantity(String productId) async {
+  state = AsyncData(
+    state.requireValue.copyWith(
+      items: state.requireValue.items.map((i) {
+        return i.productId == productId
+            ? i.copyWith(quantity: i.quantity + 1)
+            : i;
+      }).toList(),
+    ),
+  );
 
-    await _cartRepository.persistCart(state.requireValue);
+  await _cartRepository.persistCart(state.requireValue);
 
-    state = AsyncData(state.requireValue.copyWith(
-      items: state.requireValue.items
-          .map((i) => i.productId == productId
-              ? i.copyWith(quantity: item.quantity + 1)
-              : i)
-          .toList(),
-    ));
-  }
+  
+}
 
   Future<void> decrementQuantity(String productId) async {
     final current = state.requireValue;
