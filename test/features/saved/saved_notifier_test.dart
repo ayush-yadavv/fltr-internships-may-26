@@ -2,12 +2,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:flutter_shop/features/cart/data/cart_repository.dart';
+import 'package:flutter_shop/features/cart/data/cart_state.dart';
 import 'package:flutter_shop/features/cart/data/models/cart_item.dart';
+import 'package:flutter_shop/features/cart/providers/cart_providers.dart';
 import 'package:flutter_shop/features/saved/data/models/saved_item.dart';
 import 'package:flutter_shop/features/saved/data/saved_repository.dart';
 import 'package:flutter_shop/features/saved/providers/saved_providers.dart';
 
 class MockSavedRepository extends Mock implements SavedRepository {}
+
+class MockCartRepository extends Mock implements CartRepository {}
 
 void main() {
   setUpAll(() {
@@ -17,6 +22,7 @@ void main() {
       price: 0,
       imageUrl: '',
     ));
+    registerFallbackValue(const CartState());
   });
 
   late ProviderContainer container;
@@ -93,29 +99,78 @@ void main() {
     });
 
     test(
-      'TODO: removeFromSaved removes the item from state',
+      'removeFromSaved removes the item from state',
       () async {
-        // Save an item, then call removeFromSaved and verify the list is empty.
+        await container.read(savedNotifierProvider.future);
+        await container
+            .read(savedNotifierProvider.notifier)
+            .saveForLater(testCartItem);
+
+        await container
+            .read(savedNotifierProvider.notifier)
+            .removeFromSaved('s1');
+
+        final state = container.read(savedNotifierProvider).requireValue;
+        expect(state, isEmpty);
+        verify(() => mockRepo.removeItem('s1')).called(1);
       },
-      skip: 'Task 4 — removeFromSaved not yet implemented',
     );
 
     test(
-      'TODO: moveToCart removes item from saved and adds it to cart',
+      'moveToCart removes item from saved and adds it to cart',
       () async {
-        // Save an item, call moveToCart, verify:
-        //   - saved list is empty
-        //   - cart contains the item
+        final mockCartRepo = MockCartRepository();
+        when(() => mockCartRepo.loadCart()).thenReturn(const CartState());
+        when(() => mockCartRepo.persistCart(any())).thenAnswer((_) async {});
+
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [
+            savedRepositoryProvider.overrideWithValue(mockRepo),
+            cartRepositoryProvider.overrideWithValue(mockCartRepo),
+          ],
+        );
+
+        await container.read(savedNotifierProvider.future);
+        await container.read(cartNotifierProvider.future);
+
+        await container
+            .read(savedNotifierProvider.notifier)
+            .saveForLater(testCartItem);
+
+        await container
+            .read(savedNotifierProvider.notifier)
+            .moveToCart('s1');
+
+        final savedState = container.read(savedNotifierProvider).requireValue;
+        expect(savedState, isEmpty);
+
+        final cartState = container.read(cartNotifierProvider).requireValue;
+        expect(cartState.items.length, 1);
+        expect(cartState.items.first.productId, 's1');
       },
-      skip: 'Task 4 — moveToCart not yet implemented',
     );
 
     test(
-      'TODO: saved items persist across app restarts',
+      'saved items persist across app restarts',
       () async {
-        // Save an item, re-create the container, verify the item is still present.
+        await container.read(savedNotifierProvider.future);
+        await container
+            .read(savedNotifierProvider.notifier)
+            .saveForLater(testCartItem);
+
+        // Simulate restart: repo now returns the saved item
+        when(() => mockRepo.getSavedItems()).thenReturn([expectedSavedItem]);
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [savedRepositoryProvider.overrideWithValue(mockRepo)],
+        );
+
+        final state = await container.read(savedNotifierProvider.future);
+        expect(state.length, 1);
+        expect(state.first.productId, 's1');
       },
-      skip: 'Task 5 — persistence not yet tested',
     );
   });
 }
+

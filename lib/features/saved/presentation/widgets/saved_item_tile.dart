@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/saved_item.dart';
+import '../../providers/saved_providers.dart';
 
 class SavedItemTile extends ConsumerWidget {
   final SavedItem item;
@@ -38,8 +39,26 @@ class SavedItemTile extends ConsumerWidget {
             .bodySmall
             ?.copyWith(color: Colors.green[700]),
       ),
-      // TODO: add action buttons
-      trailing: const SizedBox.shrink(),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.add_shopping_cart),
+            tooltip: 'Move to cart',
+            onPressed: () => ref
+                .read(savedNotifierProvider.notifier)
+                .moveToCart(item.productId),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            color: Colors.red[400],
+            tooltip: 'Remove',
+            onPressed: () => ref
+                .read(savedNotifierProvider.notifier)
+                .removeFromSaved(item.productId),
+          ),
+        ],
+      ),
     );
   }
 }

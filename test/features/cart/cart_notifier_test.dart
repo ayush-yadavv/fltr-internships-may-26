@@ -92,46 +92,159 @@ void main() {
     });
 
     test(
-      'TODO: rapid incrementQuantity calls should result in the correct quantity',
+      'rapid incrementQuantity calls should result in the correct quantity',
       () async {
-        // When incrementQuantity is called 3 times in quick succession,
-        // the final quantity should be 4 (1 initial + 3 increments).
-        // Currently fails because incrementQuantity captures a stale item
-        // reference before awaiting the persist call (Bug #1).
+        await container.read(cartNotifierProvider.future);
+        await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+        // Fire 3 increments in quick succession
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+
+        final state = container.read(cartNotifierProvider).requireValue;
+        expect(state.items.first.quantity, 4); // 1 initial + 3 increments
       },
-      skip: 'Bug #1 — stale capture race condition in incrementQuantity',
     );
 
     test(
-      'TODO: total should reflect quantity after incrementQuantity',
+      'total should reflect quantity after incrementQuantity',
       () async {
-        // Add item at \$10, increment twice → expect total == \$30.
-        // Currently fails because incrementQuantity does not update the
-        // cached `total` field on CartState (Bug #2).
+        await container.read(cartNotifierProvider.future);
+        await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+
+        final state = container.read(cartNotifierProvider).requireValue;
+        expect(state.total, closeTo(30.0, 0.01)); // $10 × 3
       },
-      skip: 'Bug #2 — total field not updated in incrementQuantity',
     );
 
     test(
-      'TODO: total should not go negative after incrementing then removing',
+      'total should not go negative after incrementing then removing',
       () async {
-        // Add item at \$10, increment to quantity 3, then remove.
-        // Expected total: \$0.00.
-        // Currently total drifts negative because removeItem subtracts
-        // price × quantity but `total` was never updated during increments (Bug #2).
+        await container.read(cartNotifierProvider.future);
+        await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+
+        await container.read(cartNotifierProvider.notifier).removeItem('p1');
+
+        final state = container.read(cartNotifierProvider).requireValue;
+        expect(state.items, isEmpty);
+        expect(state.total, closeTo(0.0, 0.01));
       },
-      skip: 'Bug #2 — stale total causes negative drift on remove',
     );
 
     test(
-      'TODO: quantity changes should survive an app restart',
+      'quantity changes should survive an app restart',
       () async {
-        // After calling incrementQuantity, re-create the ProviderContainer
-        // (simulating a restart) and verify the persisted quantity is correct.
-        // Currently fails because incrementQuantity never calls persistCart
-        // after updating state (Bug #3).
+        await container.read(cartNotifierProvider.future);
+        await container.read(cartNotifierProvider.notifier).addItem(testItem);
+        await container
+            .read(cartNotifierProvider.notifier)
+            .incrementQuantity('p1');
+
+        // Capture what was persisted
+        final captured =
+            verify(() => mockRepo.persistCart(captureAny())).captured;
+        final lastPersisted = captured.last as CartState;
+
+        // Simulate restart: new container, repository returns persisted state
+        when(() => mockRepo.loadCart()).thenReturn(lastPersisted);
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [cartRepositoryProvider.overrideWithValue(mockRepo)],
+        );
+
+        final state = await container.read(cartNotifierProvider.future);
+        expect(state.items.first.quantity, 2);
+        expect(state.total, closeTo(20.0, 0.01));
       },
-      skip: 'Bug #3 — persistCart not called after incrementQuantity',
     );
+
+    test('decrementQuantity updates total correctly', () async {
+      await container.read(cartNotifierProvider.future);
+      await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+      // Increment to qty 3 (total = $30)
+      await container
+          .read(cartNotifierProvider.notifier)
+          .incrementQuantity('p1');
+      await container
+          .read(cartNotifierProvider.notifier)
+          .incrementQuantity('p1');
+
+      // Decrement once → qty 2 (total = $20)
+      await container
+          .read(cartNotifierProvider.notifier)
+          .decrementQuantity('p1');
+
+      final state = container.read(cartNotifierProvider).requireValue;
+      expect(state.items.first.quantity, 2);
+      expect(state.total, closeTo(20.0, 0.01));
+    });
+
+    test('decrementQuantity at quantity 1 removes the item and zeros total',
+        () async {
+      await container.read(cartNotifierProvider.future);
+      await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+      await container
+          .read(cartNotifierProvider.notifier)
+          .decrementQuantity('p1');
+
+      final state = container.read(cartNotifierProvider).requireValue;
+      expect(state.items, isEmpty);
+      expect(state.total, closeTo(0.0, 0.01));
+    });
+
+    test('decrement quantity changes should survive an app restart', () async {
+      await container.read(cartNotifierProvider.future);
+      await container.read(cartNotifierProvider.notifier).addItem(testItem);
+
+      // Increment to qty 3, then decrement to qty 2
+      await container
+          .read(cartNotifierProvider.notifier)
+          .incrementQuantity('p1');
+      await container
+          .read(cartNotifierProvider.notifier)
+          .incrementQuantity('p1');
+      await container
+          .read(cartNotifierProvider.notifier)
+          .decrementQuantity('p1');
+
+      // Capture what was persisted
+      final captured =
+          verify(() => mockRepo.persistCart(captureAny())).captured;
+      final lastPersisted = captured.last as CartState;
+
+      // Simulate restart
+      when(() => mockRepo.loadCart()).thenReturn(lastPersisted);
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [cartRepositoryProvider.overrideWithValue(mockRepo)],
+      );
+
+      final state = await container.read(cartNotifierProvider.future);
+      expect(state.items.first.quantity, 2);
+      expect(state.total, closeTo(20.0, 0.01));
+    });
   });
 }

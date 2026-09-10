@@ -44,11 +44,15 @@ class SavedRepository {
   }
 
   Future<void> removeItem(String productId) async {
-    // TODO: implement
+    final items = getSavedItems();
+    final updated = items.where((i) => i.productId != productId).toList();
+    await _persist(updated);
   }
 
   Future<void> moveToCart(String productId) async {
-    // TODO: implement
+    final items = getSavedItems();
+    final updated = items.where((i) => i.productId != productId).toList();
+    await _persist(updated);
   }
 
   Future<void> _persist(List<SavedItem> items) async {
